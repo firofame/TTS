@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f7f4">
+    <title>Read aloud - simple text to speech</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="brand">
+          <span class="brand-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 5 6 9H3v6h3l5 4V5Z"></path>
+              <path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"></path>
+            </svg>
+          </span>
+          Read aloud
+        </div>
+        <span class="browser-badge"><span aria-hidden="true"></span> Built into your browser</span>
+      </header>
+
+      <section class="intro" aria-labelledby="heading">
+        <h1>Less reading.<br>More listening.</h1>
+        <p>Paste your text, pick a voice, and press play.</p>
+      </section>
+
+      <section class="reader" aria-label="Text to speech">
+        <div class="text-heading">
+          <label for="text">Your text</label>
+          <button id="clear" class="text-button" type="button" disabled>Clear</button>
+        </div>
+        <textarea id="text" placeholder="Paste something you'd like to listen to..." spellcheck="false"></textarea>
+        <div class="text-footer">
+          <span id="character-count">0 characters</span>
+          <span>Make yourself comfortable.</span>
+        </div>
+
+        <div class="settings">
+          <div class="language-setting">
+            <label for="language">Language</label>
+            <select id="language">
+              <option value="">All languages</option>
+            </select>
+          </div>
+          <div class="voice-setting">
+            <label for="voice">Voice</label>
+            <select id="voice">
+              <option value="">System default</option>
+            </select>
+          </div>
+          <div class="speed-setting">
+            <div class="speed-heading">
+              <label for="speed">Speed</label>
+              <output id="speed-value" for="speed">1x</output>
+            </div>
+            <input id="speed" type="range" min="0.5" max="3" step="0.25" value="1" aria-valuetext="1 times normal speed">
+            <div class="range-labels" aria-hidden="true"><span>0.5x</span><span>3x</span></div>
+          </div>
+        </div>
+
+        <div class="playback">
+          <div class="playback-buttons">
+            <button id="play" class="play-button" type="button" data-mode="idle" disabled>
+              <svg class="play-symbol" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6 3.8a.8.8 0 0 1 1.2-.7l9 6.2a.8.8 0 0 1 0 1.4l-9 6.2a.8.8 0 0 1-1.2-.7Z"></path></svg>
+              <svg class="pause-symbol" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="5" y="4" width="3" height="12" rx="1"></rect><rect x="12" y="4" width="3" height="12" rx="1"></rect></svg>
+              <span id="play-label">Play</span>
+            </button>
+            <button id="stop" class="stop-button" type="button" disabled>
+              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="10" height="10" rx="1.5"></rect></svg>
+              Stop
+            </button>
+          </div>
+          <p id="status" role="status">Ready when you are.</p>
+        </div>
+        <p id="editing-hint" class="editing-hint" hidden>Stop playback to edit your text, language, voice, or speed.</p>
+      </section>
+
+      <footer>No account. No API key. Just your browser's speech engine.<br><span>Available voices depend on your device. Some voices use online services.</span></footer>
+      <noscript><p class="noscript">Please enable JavaScript to use text to speech.</p></noscript>
+    </main>
+  </body>
+</html>
