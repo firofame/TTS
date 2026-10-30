@@ -304,6 +304,42 @@ test("Azure loads automatically without a source selector, browser speech, or cl
   assert.deepEqual(Array.from(app.get("voice").children, (item) => item.value), [azureVoice.voiceURI]);
 });
 
+test("static link preview metadata and thumbnail meet WhatsApp requirements", () => {
+  const head = html.match(/<head\b[^>]*>[\s\S]*?<\/head>/i);
+  assert.ok(head);
+  assert.ok(Buffer.byteLength(html.slice(0, head.index + head[0].length), "utf8") <= 300000);
+  const metadata = new Map();
+  for (const tag of head[0].matchAll(/<meta\b[^>]*>/gi)) {
+    const property = tag[0].match(/\bproperty="([^"]+)"/i)?.[1];
+    if (!property?.startsWith("og:")) continue;
+    assert.equal(metadata.has(property), false, `Duplicate ${property}`);
+    const content = tag[0].match(/\bcontent="([^"]*)"/i)?.[1];
+    assert.ok(content?.trim(), `Empty ${property}`);
+    metadata.set(property, content);
+  }
+  for (const property of ["og:title", "og:description", "og:url", "og:image"]) {
+    assert.ok(metadata.has(property), `Missing ${property} in the static head`);
+  }
+  assert.ok(metadata.get("og:description").length <= 80);
+  const canonical = new URL(metadata.get("og:url"));
+  assert.equal(canonical.href, "https://firofame.github.io/TTS/");
+  assert.match(head[0], /<link rel="canonical" href="https:\/\/firofame\.github\.io\/TTS\/">/);
+  const imageURL = new URL(metadata.get("og:image"));
+  assert.equal(imageURL.href, `${canonical.href}assets/link-preview.png`);
+  const image = readFileSync(`${__dirname}/${imageURL.pathname.slice(canonical.pathname.length)}`);
+  assert.ok(image.length < 600000, "Preview image must be under 600 KB");
+  assert.deepEqual(image.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  assert.equal(image.toString("ascii", 12, 16), "IHDR");
+  const width = image.readUInt32BE(16);
+  const height = image.readUInt32BE(20);
+  assert.ok(width >= 300, "Preview image must be at least 300 px wide");
+  assert.ok(height > 0 && width / height <= 4, "Preview aspect ratio must not exceed 4:1");
+  assert.equal(metadata.get("og:image:width"), String(width));
+  assert.equal(metadata.get("og:image:height"), String(height));
+  assert.equal(metadata.get("og:image:type"), "image/png");
+  assert.ok(metadata.get("og:image:alt"));
+});
+
 test("footer offers a one-time INR 10 coffee through Stripe without client credentials or scripts", () => {
   const footer = html.match(/<footer>([\s\S]*?)<\/footer>/)?.[1];
   assert.ok(footer);

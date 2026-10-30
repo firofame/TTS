@@ -65,6 +65,28 @@ the repository root from `main` when changes are pushed. The same frontend
 works locally and on that site without any configuration changes.
 The deployment URL in [app.js](./app.js) is public and contains no credentials.
 
+## Link previews
+
+[index.html](./index.html) includes static Open Graph metadata near the start of
+the HTML head, so WhatsApp can read it with an HTTP GET without JavaScript.
+The canonical URL is <https://firofame.github.io/TTS/>, without voice selections,
+tracking parameters, or fragments; shared voice links still select their voice
+in the app, but use the same site preview.
+
+The public thumbnail is
+<https://firofame.github.io/TTS/assets/link-preview.png>. It is a 1734 x 907 PNG
+under 600 KB. To change the artwork, replace
+[assets/link-preview.png](./assets/link-preview.png) and keep the image
+dimensions and alternative text in the metadata in sync. Keep the image under
+600 KB, at least 300 pixels wide, and no wider than a 4:1 aspect ratio.
+If the site moves, update both absolute preview URLs and the canonical link.
+
+After publishing the frontend and image, paste the site URL into a WhatsApp
+chat or status composer and wait up to 10 seconds before sending. Confirm the
+title, description, and large thumbnail appear. Automated tests verify the
+static metadata and image limits locally; WhatsApp ultimately controls whether
+and how a preview is displayed.
+
 ## Privacy and playback
 
 The app does not save text or credentials. With Azure voices, text is sent to
@@ -177,6 +199,6 @@ system and saved themes, live appearance changes, storage failures,
 automatic voice loading, Azure-only UI, cancellation,
 pause/resume, chunking, filtering, voice URL selection and sharing, SSML escaping,
 full-text MP3 downloads, download cancellation and cleanup, the footer's Stripe
-support link, input validation,
+support link, WhatsApp preview metadata and thumbnail limits, input validation,
 public route registration, and explicit upstream errors without
 consuming Azure quota.
