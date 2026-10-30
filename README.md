@@ -10,9 +10,24 @@ Open the app in Chrome, Edge, Firefox, or Safari. Paste text, choose a language,
 voice, and speed (0.5x to 3x), then press **Play**. **Pause** and **Resume** keep
 your place. **Stop** returns to the beginning and unlocks editing.
 
+The theme icons offer **System** (monitor), **Light** (sun), and **Dark** (moon).
+The selected icon is highlighted. The default is **System**, which follows
+changes to your device's appearance while the app is open. Your selection is
+saved locally for future visits. If browser storage is unavailable, a notice
+appears and theme changes still work for the current page.
+
 **Microsoft Azure** is the only voice source. **All languages** shows all Azure
 voices. Regional language variants are filtered separately. The default selection
 is **American English (en-US)** with **Ava Multilingual (en-US)** when available.
+
+Link directly to a voice using its Azure voice ID, for example
+<https://firofame.github.io/TTS/?voice=fr-FR-DeniseNeural>.
+Once voices load, the app selects that voice and its language automatically.
+Changing the voice or language updates the `voice` URL parameter without
+reloading or adding browser history entries; other parameters and the URL
+fragment are preserved. Copy the address to share the selected voice.
+If the ID is unavailable or empty, a warning appears and the normal default
+selection is used. A link without `voice` keeps the defaults above.
 
 For local use, serve this folder and open <http://127.0.0.1:8000>:
 
@@ -129,10 +144,12 @@ With Node.js 22+:
 
 ```sh
 npm ci --prefix azure-functions
-node --test app.test.cjs azure-functions/speech.test.cjs
+node --test app.test.cjs theme.test.cjs azure-functions/speech.test.cjs
 ```
 
 Tests mock media playback and Azure responses. They cover
+system and saved themes, live appearance changes, storage failures,
 automatic voice loading, Azure-only UI, cancellation,
-pause/resume, chunking, filtering, SSML escaping, input validation, public route
-registration, and explicit upstream errors without consuming Azure quota.
+pause/resume, chunking, filtering, voice URL selection and sharing, SSML escaping,
+input validation, public route registration, and explicit upstream errors without
+consuming Azure quota.

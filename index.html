@@ -4,7 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f6f7f4">
+    <meta name="color-scheme" content="light dark">
     <title>Read aloud - simple text to speech</title>
+    <script src="theme.js"></script>
     <link rel="stylesheet" href="styles.css">
     <script src="app.js" defer></script>
   </head>
@@ -20,8 +22,22 @@
           </span>
           Read aloud
         </div>
-        <span class="voice-badge"><span aria-hidden="true"></span> Microsoft Azure voices</span>
+        <div class="header-actions">
+          <span class="voice-badge"><span aria-hidden="true"></span> Microsoft Azure voices</span>
+          <div class="theme-setting" role="group" aria-label="Theme">
+            <button class="theme-button" type="button" data-theme-choice="system" aria-label="System theme" title="System theme" aria-pressed="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"></rect><path d="M8 21h8m-4-4v4"></path></svg>
+            </button>
+            <button class="theme-button" type="button" data-theme-choice="light" aria-label="Light theme" title="Light theme" aria-pressed="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"></path></svg>
+            </button>
+            <button class="theme-button" type="button" data-theme-choice="dark" aria-label="Dark theme" title="Dark theme" aria-pressed="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14A9 9 0 0 1 10 3.5 9 9 0 1 0 20.5 14Z"></path></svg>
+            </button>
+          </div>
+        </div>
       </header>
+      <p id="theme-notice" class="theme-notice" role="status" hidden></p>
 
       <section class="intro" aria-labelledby="heading">
         <h1>Less reading.<br>More listening.</h1>

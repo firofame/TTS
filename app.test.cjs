@@ -16,7 +16,8 @@ const audioResponse = () => ({
 });
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-function setup({ availableVoices = [azureVoice], fetch = async (url) => url.endsWith("/voices")
+function setup({ availableVoices = [azureVoice], url = "https://firofame.github.io/TTS/",
+  fetch = async (url) => url.endsWith("/voices")
   ? jsonResponse({ voices: availableVoices }) : audioResponse() } = {}) {
   const elements = new Map();
   function element() {
@@ -56,6 +57,16 @@ function setup({ availableVoices = [azureVoice], fetch = async (url) => url.ends
   };
   const window = {
     events: {},
+    location: new URL(url),
+    history: {
+      state: { reader: true },
+      replacements: [],
+      replaceState(state, title, url) {
+        this.state = state;
+        this.replacements.push({ state, title, url });
+        window.location = new URL(url);
+      },
+    },
     addEventListener(name, callback) { this.events[name] = callback; },
   };
   const audio = {
@@ -152,6 +163,105 @@ test("an unavailable default language falls back to all available languages", as
   assert.equal(get("language").value, "");
   assert.equal(get("voice").value, french.voiceURI);
   assert.equal(get("voice").disabled, false);
+});
+
+test("a voice URL selects the exact voice and its language after the catalog loads", async () => {
+  const french = { voiceURI: "fr-FR-DeniseNeural", name: "Denise", lang: "fr-FR" };
+  for (const selectedVoice of [azureVoice, french]) {
+    const url = `https://firofame.github.io/TTS/?voice=${encodeURIComponent(selectedVoice.voiceURI)}`;
+    let resolveVoices;
+    const app = setup({ url, fetch: async (url) => url.endsWith("/voices")
+      ? new Promise((resolve) => { resolveVoices = resolve; }) : audioResponse() });
+    assert.equal(app.get("voice").disabled, true);
+    resolveVoices(jsonResponse({ voices: [avaVoice, azureVoice, french] }));
+    await tick();
+    assert.equal(app.get("language").value, selectedVoice.lang);
+    assert.equal(app.get("voice").value, selectedVoice.voiceURI);
+    assert.ok(app.get("voice").children.some((item) => item.value === selectedVoice.voiceURI));
+    assert.equal(app.get("status").classes.has("error"), false);
+    assert.equal(app.window.location.href, url);
+    assert.equal(app.window.history.replacements.length, 0);
+    app.paste("Use the linked voice.");
+    app.get("play").fire("click");
+    await tick();
+    assert.equal(JSON.parse(app.requests[1].options.body).voice, selectedVoice.voiceURI);
+  }
+});
+
+test("missing voice parameters preserve defaults and do not rewrite the URL", async () => {
+  const url = "https://firofame.github.io/TTS/?other=value#reader";
+  const app = setup({ url, availableVoices: [azureVoice, avaVoice] });
+  await tick();
+  assert.equal(app.get("voice").value, avaVoice.voiceURI);
+  assert.equal(app.window.location.href, url);
+  assert.equal(app.window.history.replacements.length, 0);
+});
+
+test("invalid and empty voice parameters warn and use the default voice for playback", async () => {
+  for (const query of ["voice=unknown", "voice=", "voice=%3Cscript%3E", "voice=%E0%A4%A"]) {
+    const app = setup({
+      url: `https://firofame.github.io/TTS/?${query}`,
+      availableVoices: [azureVoice, avaVoice],
+    });
+    await tick();
+    assert.equal(app.get("voice").value, avaVoice.voiceURI);
+    assert.equal(app.get("language").value, "en-US");
+    assert.equal(app.get("status").classes.has("error"), true);
+    assert.match(app.get("status").textContent, /voice in this link is unavailable/);
+    assert.equal(app.window.history.replacements.length, 0);
+    app.paste("Use a known voice.");
+    app.get("play").fire("click");
+    await tick();
+    assert.equal(JSON.parse(app.requests[1].options.body).voice, avaVoice.voiceURI);
+  }
+});
+
+test("voice and language changes keep a shareable URL without losing other parameters, hash, or history state", async () => {
+  const french = { voiceURI: "fr-FR-DeniseNeural", name: "Denise", lang: "fr-FR" };
+  const availableVoices = [azureVoice, avaVoice, french];
+  const app = setup({
+    url: "https://firofame.github.io/TTS/?other=hello%20world&other=again&voice=unknown#reader",
+    availableVoices,
+  });
+  await tick();
+  const historyState = app.window.history.state;
+  app.get("voice").value = azureVoice.voiceURI;
+  app.get("voice").fire("change");
+  assert.equal(app.window.location.searchParams.get("voice"), azureVoice.voiceURI);
+  assert.deepEqual(app.window.location.searchParams.getAll("other"), ["hello world", "again"]);
+  assert.equal(app.window.location.hash, "#reader");
+  assert.equal(app.window.history.state, historyState);
+  assert.equal(app.window.history.replacements.length, 1);
+  assert.equal(app.get("status").classes.has("error"), false);
+  app.get("voice").fire("change");
+  assert.equal(app.window.history.replacements.length, 1);
+  app.get("language").value = "fr-FR";
+  app.get("language").fire("change");
+  assert.equal(app.window.location.searchParams.get("voice"), french.voiceURI);
+  assert.equal(app.window.history.replacements.length, 2);
+  app.get("language").value = "";
+  app.get("language").fire("change");
+  assert.equal(app.window.history.replacements.length, 2);
+  const shared = setup({ url: app.window.location.href, availableVoices });
+  await tick();
+  assert.equal(shared.get("voice").value, french.voiceURI);
+  assert.equal(shared.get("language").value, "fr-FR");
+  assert.equal(app.requests.length, 1);
+});
+
+test("URL update failures are visible without disabling playback", async () => {
+  const app = setup({ availableVoices: [azureVoice, avaVoice] });
+  await tick();
+  app.window.history.replaceState = () => { throw new Error("History is unavailable."); };
+  app.get("voice").value = azureVoice.voiceURI;
+  app.get("voice").fire("change");
+  assert.match(app.get("status").textContent, /Could not update the voice link: History is unavailable/);
+  assert.equal(app.get("status").classes.has("error"), true);
+  app.paste("Playback still works.");
+  assert.equal(app.get("play").disabled, false);
+  app.get("play").fire("click");
+  await tick();
+  assert.equal(JSON.parse(app.requests[1].options.body).voice, azureVoice.voiceURI);
 });
 
 test("empty input is disabled; whitespace cannot start playback", async () => {

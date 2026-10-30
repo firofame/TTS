@@ -88,6 +88,18 @@ function filterVoices() {
       matchingVoices[0])?.voiceURI || "";
 }
 
+function updateVoiceUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("voice", voice.value);
+  try {
+    if (url.href !== window.location.href) window.history.replaceState(window.history.state, "", url.href);
+  } catch (error) {
+    render(`Could not update the voice link: ${error.message}`, true);
+    return;
+  }
+  render(readyMessage());
+}
+
 function splitText(value, limit = 1500) {
   const result = [];
   let remaining = value.trim();
@@ -239,7 +251,11 @@ clear.addEventListener("click", () => {
   text.focus();
 });
 text.addEventListener("input", () => render(isReady() ? readyMessage() : undefined));
-language.addEventListener("change", filterVoices);
+language.addEventListener("change", () => {
+  filterVoices();
+  updateVoiceUrl();
+});
+voice.addEventListener("change", updateVoiceUrl);
 speed.addEventListener("input", () => {
   const rate = Number(speed.value);
   speedValue.textContent = `${rate}x`;
@@ -262,7 +278,18 @@ async function loadAzureVoices() {
     for (const item of result.voices) Intl.getCanonicalLocales(item.lang);
     voices = result.voices;
     updateLanguages();
-    render(readyMessage());
+    const requestedVoice = new URL(window.location.href).searchParams.get("voice");
+    const selectedVoice = voices.find((item) => item.voiceURI === requestedVoice);
+    if (selectedVoice) {
+      language.value = selectedVoice.lang;
+      filterVoices();
+      voice.value = selectedVoice.voiceURI;
+    }
+    if (requestedVoice !== null && !selectedVoice) {
+      render("The voice in this link is unavailable. Using the default selection; choose another voice if needed.", true);
+    } else {
+      render(readyMessage());
+    }
   } catch (error) {
     if (connectionRequest !== controller) return;
     render(`Could not load Azure voices: ${error.message} Reload the page to retry.`, true);
