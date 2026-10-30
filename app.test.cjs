@@ -132,6 +132,12 @@ test("Azure loads automatically without a source selector, browser speech, or cl
   assert.deepEqual(Array.from(app.get("voice").children, (item) => item.value), [azureVoice.voiceURI]);
 });
 
+test("playback precedes language, voice, and speed settings in document order", () => {
+  for (const id of ["language", "voice", "speed"]) {
+    assert.ok(html.indexOf('id="play"') < html.indexOf(`id="${id}"`));
+  }
+});
+
 test("American English and Ava Multilingual are selected by default and used for playback", async () => {
   assert.match(html, /<select id="language">\s*<option value="en-US">American English \(en-US\)<\/option>/);
   const app = setup({ availableVoices: [

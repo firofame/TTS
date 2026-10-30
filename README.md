@@ -10,6 +10,13 @@ Open the app in Chrome, Edge, Firefox, or Safari. Paste text, choose a language,
 voice, and speed (0.5x to 3x), then press **Play**. **Pause** and **Resume** keep
 your place. **Stop** returns to the beginning and unlocks editing.
 
+On mobile, the reader comes first: a single-row header, no visible marketing
+intro, and a full-width primary playback button directly below the text.
+Language, voice, and speed settings follow the playback controls.
+Theme and playback buttons have touch-friendly targets, and text fields
+use a mobile-friendly font size to avoid automatic zoom when focused.
+The desktop layout keeps its introductory heading and wider controls.
+
 The theme icons offer **System** (monitor), **Light** (sun), and **Dark** (moon).
 The selected icon is highlighted. The default is **System**, which follows
 changes to your device's appearance while the app is open. Your selection is

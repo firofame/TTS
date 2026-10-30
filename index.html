@@ -40,7 +40,7 @@
       <p id="theme-notice" class="theme-notice" role="status" hidden></p>
 
       <section class="intro" aria-labelledby="heading">
-        <h1>Less reading.<br>More listening.</h1>
+        <h1 id="heading">Less reading.<br>More listening.</h1>
         <p>Paste your text, pick a voice, and press play.</p>
       </section>
 
@@ -54,6 +54,22 @@
           <span id="character-count">0 characters</span>
           <span>Make yourself comfortable.</span>
         </div>
+
+        <div class="playback">
+          <div class="playback-buttons">
+            <button id="play" class="play-button" type="button" data-mode="idle" disabled>
+              <svg class="play-symbol" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6 3.8a.8.8 0 0 1 1.2-.7l9 6.2a.8.8 0 0 1 0 1.4l-9 6.2a.8.8 0 0 1-1.2-.7Z"></path></svg>
+              <svg class="pause-symbol" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="5" y="4" width="3" height="12" rx="1"></rect><rect x="12" y="4" width="3" height="12" rx="1"></rect></svg>
+              <span id="play-label">Play</span>
+            </button>
+            <button id="stop" class="stop-button" type="button" disabled>
+              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="10" height="10" rx="1.5"></rect></svg>
+              Stop
+            </button>
+          </div>
+          <p id="status" role="status">Loading Microsoft neural voices...</p>
+        </div>
+        <p id="editing-hint" class="editing-hint" hidden>Stop playback to edit your text, language, voice, or speed.</p>
 
         <div class="settings">
           <div class="language-setting">
@@ -77,22 +93,6 @@
             <div class="range-labels" aria-hidden="true"><span>0.5x</span><span>3x</span></div>
           </div>
         </div>
-
-        <div class="playback">
-          <div class="playback-buttons">
-            <button id="play" class="play-button" type="button" data-mode="idle" disabled>
-              <svg class="play-symbol" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6 3.8a.8.8 0 0 1 1.2-.7l9 6.2a.8.8 0 0 1 0 1.4l-9 6.2a.8.8 0 0 1-1.2-.7Z"></path></svg>
-              <svg class="pause-symbol" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="5" y="4" width="3" height="12" rx="1"></rect><rect x="12" y="4" width="3" height="12" rx="1"></rect></svg>
-              <span id="play-label">Play</span>
-            </button>
-            <button id="stop" class="stop-button" type="button" disabled>
-              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="10" height="10" rx="1.5"></rect></svg>
-              Stop
-            </button>
-          </div>
-          <p id="status" role="status">Loading Microsoft neural voices...</p>
-        </div>
-        <p id="editing-hint" class="editing-hint" hidden>Stop playback to edit your text, language, voice, or speed.</p>
       </section>
 
       <footer>Microsoft neural voices, ready to listen.<br><span>Azure sends text to Microsoft for speech processing and requires internet access.</span></footer>
