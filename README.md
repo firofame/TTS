@@ -65,7 +65,12 @@ the repository root from `main` when changes are pushed. The same frontend
 works locally and on that site without any configuration changes.
 The deployment URL in [app.js](./app.js) is public and contains no credentials.
 
-## Link previews
+## Favicon and link previews
+
+The browser favicon uses [assets/favicon.ico](./assets/favicon.ico), with a
+512 x 512 [PNG version](./assets/favicon.png) for larger icons. Both are linked
+from [index.html](./index.html) using relative paths that work locally and on
+GitHub Pages. Replace these assets to update the favicon.
 
 [index.html](./index.html) includes static Open Graph metadata near the start of
 the HTML head, so WhatsApp can read it with an HTTP GET without JavaScript.
@@ -199,6 +204,6 @@ system and saved themes, live appearance changes, storage failures,
 automatic voice loading, Azure-only UI, cancellation,
 pause/resume, chunking, filtering, voice URL selection and sharing, SSML escaping,
 full-text MP3 downloads, download cancellation and cleanup, the footer's Stripe
-support link, WhatsApp preview metadata and thumbnail limits, input validation,
-public route registration, and explicit upstream errors without
-consuming Azure quota.
+support link, favicon assets, WhatsApp preview metadata and thumbnail limits,
+input validation, public route registration, and explicit upstream errors
+without consuming Azure quota.

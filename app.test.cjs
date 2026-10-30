@@ -304,6 +304,21 @@ test("Azure loads automatically without a source selector, browser speech, or cl
   assert.deepEqual(Array.from(app.get("voice").children, (item) => item.value), [azureVoice.voiceURI]);
 });
 
+test("static favicon links use bundled ICO and PNG assets on GitHub Pages", () => {
+  const head = html.match(/<head\b[^>]*>[\s\S]*?<\/head>/i)?.[0];
+  assert.ok(head);
+  assert.match(head, /<link rel="icon" href="assets\/favicon.ico" type="image\/vnd.microsoft.icon">/);
+  assert.match(head, /<link rel="icon" href="assets\/favicon.png" type="image\/png" sizes="512x512">/);
+  const ico = readFileSync(`${__dirname}/assets/favicon.ico`);
+  assert.equal(ico.readUInt16LE(0), 0);
+  assert.equal(ico.readUInt16LE(2), 1);
+  assert.ok(ico.readUInt16LE(4) > 0);
+  const png = readFileSync(`${__dirname}/assets/favicon.png`);
+  assert.deepEqual(png.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  assert.equal(png.readUInt32BE(16), 512);
+  assert.equal(png.readUInt32BE(20), 512);
+});
+
 test("static link preview metadata and thumbnail meet WhatsApp requirements", () => {
   const head = html.match(/<head\b[^>]*>[\s\S]*?<\/head>/i);
   assert.ok(head);
