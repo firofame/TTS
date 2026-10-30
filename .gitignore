@@ -1,0 +1,5 @@
+.DS_Store
+*.log
+node_modules/
+azure-functions/local.settings.json
+azure-functions/.azure/

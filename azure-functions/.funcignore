@@ -1,0 +1,5 @@
+local.settings.json
+local.settings.example.json
+speech.test.cjs
+node_modules/
+.azure/

@@ -1,34 +1,138 @@
 # Read aloud
 
-A minimal text-to-speech app using the browser's built-in Web Speech API.
-No dependencies, account, API key, or build step.
+A minimal text-to-speech app using Microsoft Azure neural voices only.
+No frontend dependencies, build step, sign-in, API-key fields, voice-source
+selector, or configuration screen. Azure voices load automatically.
 
 ## Use
 
-Live app: <https://firofame.github.io/TTS/>.
+Open the app in Chrome, Edge, Firefox, or Safari. Paste text, choose a language,
+voice, and speed (0.5x to 3x), then press **Play**. **Pause** and **Resume** keep
+your place. **Stop** returns to the beginning and unlocks editing.
 
-Open [index.html](./index.html) in a current version of Chrome, Edge, or Safari.
-Paste text, optionally filter voices by **Language**, choose a voice and speed
-(0.5x to 3x), then press **Play**. **All languages** shows every available voice
-and the system default. Choosing a language (including its regional variant)
-shows only matching voices and selects one if your current voice does not match.
-**Pause** and **Resume** keep your place. **Stop** returns to the beginning and
-unlocks the text, language, voice, and speed controls.
+**Microsoft Azure** is the only voice source. **All languages** shows all Azure
+voices. Regional language variants are filtered separately. The default selection
+is **American English (en-US)** with **Ava Multilingual (en-US)** when available.
 
-Long text is read in short sections to avoid browser utterance-length limits.
-Available voices, pronunciation, actual speaking speed, and pause/resume behavior
-depend on your browser and operating system. If pause/resume is unreliable in
-your browser, use Stop and Play or try another browser.
+For local use, serve this folder and open <http://127.0.0.1:8000>:
 
-The app does not store your text or send it to an app server. Some browser or
-system voices use online speech services; choose an offline voice in your
-device's settings if you need offline processing.
+```sh
+python3 -m http.server 8000 --bind 127.0.0.1
+```
 
-For local HTTP preview, run `python3 -m http.server 8000 --bind 127.0.0.1`
-from this folder and open <http://127.0.0.1:8000>.
+Use HTTP, not `file://`, for Azure playback. No local gateway, Keychain access,
+or secret environment variables are needed on the user's computer.
+
+The GitHub Pages site is <https://firofame.github.io/TTS/>. GitHub Pages publishes
+the repository root from `main` when changes are pushed. The same frontend
+works locally and on that site without any configuration changes.
+The deployment URL in [app.js](./app.js) is public and contains no credentials.
+
+## Privacy and playback
+
+The app does not save text or credentials. With Azure voices, text is sent to
+the app's Azure Function and Microsoft for speech processing.
+
+Long text is split into sections of at most 1,500 UTF-16 code units.
+Azure audio is played in the browser with
+pitch-preserving speed control. Pause/Resume does not synthesize the same audio
+again. Stop aborts pending requests and releases audio, but already submitted
+Azure work may still count toward quota. Starting over synthesizes text again.
+There are no automatic synthesis retries or background prefetch requests.
+
+If Azure is unavailable, the app shows an explicit error. Reload the page to
+retry loading its catalog, or try playback again later if synthesis fails.
+There is no browser-voice fallback.
+
+## Azure deployment
+
+The backend is already deployed in Central India:
+
+| Resource | Current setup |
+| --- | --- |
+| Resource group | `rg-read-aloud-0b33fdb4` |
+| Region | `centralindia` |
+| Speech resource | `read-aloud-speech-0b33fdb4`, Free F0 |
+| Function App | `read-aloud-0b33fdb4`, Linux Consumption, Node.js 22 |
+| Public API | `https://read-aloud-0b33fdb4.azurewebsites.net/api` |
+| Storage | `ttsaudio0b33fdb4`, Standard LRS, no public blob access |
+
+[azure-functions/](./azure-functions/) contains a Node.js 22+ Azure Functions v4
+backend exposing `GET /api/voices` and `POST /api/speech`. Both routes are
+intentionally **anonymous**, so GitHub Pages can use them without asking users
+for keys or sign-in. Only the server authenticates to Microsoft Speech.
+
+The Speech key remains in Azure application settings and is never returned to
+the browser, saved in the frontend, or committed to Git. Optional Application
+Insights is disabled.
+
+### Shared quota and costs
+
+All visitors share the resource's
+[F0 allowance](https://azure.microsoft.com/en-us/pricing/details/speech/),
+currently 500,000 neural TTS characters per month and 20 transactions per minute.
+The catalog excludes HD voices. Speech stays on **F0**: once its allowance is
+exhausted, requests fail rather than automatically upgrading to S0.
+
+The endpoint is public. Anyone can call it or consume the shared allowance.
+Allowed browser origins are limited to `https://firofame.github.io` and
+`http://127.0.0.1:8000`, but **CORS is not authentication** and cannot prevent
+non-browser callers. Input length limits and XML escaping are enforced on the
+server, not just in the UI.
+
+**Function hosting and storage have separate allowances and possible charges.**
+F0 does not cap those costs. Budget alerts are notifications, not spending caps.
+For wider public use, consider authenticated access and durable rate limiting.
+
+### Operator settings and updates
+
+In the Function App's **Settings > Environment variables**:
+
+| Setting | Value |
+| --- | --- |
+| `SPEECH_KEY` | Speech resource key |
+| `SPEECH_REGION` | `centralindia` |
+| `FUNCTIONS_WORKER_RUNTIME` | `node` |
+
+Keep the Speech resource on Free F0 unless you intentionally accept paid Speech
+usage. Keep secrets in Azure settings or a Key Vault reference, not this repo.
+
+With [Azure Functions Core Tools v4](https://learn.microsoft.com/en-us/azure/azure-functions/functions-run-local)
+installed and Azure authenticated, deploy backend updates:
+
+```sh
+cd azure-functions
+npm ci
+func azure functionapp publish read-aloud-0b33fdb4 --build remote
+```
+
+Backend updates do not publish the static frontend; push frontend updates to
+`main` to publish them to GitHub Pages. A different frontend origin also needs an explicit
+entry under the Function App's **API > CORS**. Use an origin without a path,
+not `*`. Allow `Content-Type` in preflight requests.
+
+For isolated backend development, copy
+[local.settings.example.json](./azure-functions/local.settings.example.json)
+to `azure-functions/local.settings.json`, fill its Speech settings, then run
+`npm start` inside that directory. The real local settings are ignored by Git
+and deployment. The reader normally uses the deployed public API.
+
+Maintenance: Node.js 22 support ends April 30, 2027, and it is the last Node.js
+version supported on Linux Consumption. Migrate to Flex Consumption and a
+supported Node.js version before then. Linux Consumption retires September 30,
+2028. See Microsoft's
+[language support policy](https://learn.microsoft.com/en-us/azure/azure-functions/supported-languages).
 
 ## Test
 
-Run `node --test app.test.cjs` (Node.js 18 or newer).
-The tests use a mocked speech engine; actual audio output still depends on
-the browser and device.
+With Node.js 22+:
+
+```sh
+npm ci --prefix azure-functions
+node --test app.test.cjs azure-functions/speech.test.cjs
+```
+
+Tests mock media playback and Azure responses. They cover
+automatic voice loading, Azure-only UI, cancellation,
+pause/resume, chunking, filtering, SSML escaping, input validation, public route
+registration, and explicit upstream errors without consuming Azure quota.

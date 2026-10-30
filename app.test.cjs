@@ -3,8 +3,21 @@ const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
 const { runInNewContext } = require("node:vm");
 const source = readFileSync(`${__dirname}/app.js`, "utf8");
+const html = readFileSync(`${__dirname}/index.html`, "utf8");
+const elementIds = new Set(Array.from(html.matchAll(/\bid="([^"]+)"/g), (match) => match[1]));
+const azureVoice = { voiceURI: "en-US-JennyNeural", name: "Jenny", lang: "en-US" };
+const avaVoice = { voiceURI: "en-US-AvaMultilingualNeural", name: "Ava Multilingual", lang: "en-US" };
+const jsonResponse = (value, status = 200) => new Response(JSON.stringify(value), {
+  status, headers: { "Content-Type": "application/json" },
+});
+const audioResponse = () => ({
+  ok: true,
+  blob: async () => new Blob(["mock audio"], { type: "audio/mpeg" }),
+});
+const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-function setup({ supported = true, availableVoices = [] } = {}) {
+function setup({ availableVoices = [azureVoice], fetch = async (url) => url.endsWith("/voices")
+  ? jsonResponse({ voices: availableVoices }) : audioResponse() } = {}) {
   const elements = new Map();
   function element() {
     return {
@@ -24,269 +37,353 @@ function setup({ supported = true, availableVoices = [] } = {}) {
       setAttribute(name, value) { this.attributes[name] = value; },
       replaceChildren(...children) { this.children = children; },
       focus() { this.focused = true; },
-      fire(name) { this.events[name]?.(); },
+      fire(name) { return this.events[name]?.(); },
     };
   }
   const document = {
     getElementById(id) {
+      assert.ok(elementIds.has(id), `Missing HTML element: ${id}`);
       if (!elements.has(id)) {
         const item = element();
         item.classList.owner = item;
         if (id === "speed") item.value = "1";
+        if (id === "language") item.value = "en-US";
         elements.set(id, item);
       }
       return elements.get(id);
     },
     createElement: element,
   };
-  const synth = {
-    utterances: [],
-    events: {},
-    cancels: 0,
-    pauses: 0,
-    resumes: 0,
-    getVoices: () => availableVoices,
-    addEventListener(name, callback) { this.events[name] = callback; },
-    speak(utterance) { this.utterances.push(utterance); },
-    cancel() { this.cancels += 1; },
-    pause() { this.pauses += 1; },
-    resume() { this.resumes += 1; },
-  };
   const window = {
     events: {},
     addEventListener(name, callback) { this.events[name] = callback; },
   };
-  if (supported) {
-    window.speechSynthesis = synth;
-    window.SpeechSynthesisUtterance = class {
-      constructor(text) { this.text = text; }
-    };
+  const audio = {
+    src: "",
+    plays: 0,
+    pauses: 0,
+    loads: 0,
+    play() { this.plays += 1; return Promise.resolve(); },
+    pause() { this.pauses += 1; },
+    load() { this.loads += 1; },
+    removeAttribute(name) { if (name === "src") this.src = ""; },
+  };
+  window.Audio = function () { return audio; };
+  const urls = { created: [], revoked: [] };
+  class TestURL extends URL {
+    static createObjectURL(blob) {
+      const value = `blob:test-${urls.created.length}`;
+      urls.created.push({ value, blob });
+      return value;
+    }
+    static revokeObjectURL(value) { urls.revoked.push(value); }
   }
-  const context = { window, document };
+  const requests = [];
+  const context = {
+    window, document, URL: TestURL, AbortController, AbortSignal,
+    fetch(url, options) {
+      requests.push({ url, options });
+      return fetch(url, options);
+    },
+  };
   runInNewContext(source, context);
   const get = (id) => document.getElementById(id);
   const paste = (value) => {
     get("text").value = value;
     get("text").fire("input");
   };
-  return { get, paste, synth, window, context, availableVoices };
+  return { get, paste, window, context, audio, urls, requests };
 }
 
-test("empty input is disabled; whitespace cannot start playback", () => {
-  const { get, paste, synth } = setup();
+test("Azure loads automatically without a source selector, browser speech, or client credentials", async () => {
+  assert.doesNotMatch(html, /id="provider"|provider-setting|Voice source|Browser voices|System default/);
+  assert.match(html, /Microsoft Azure voices/);
+  assert.doesNotMatch(html, /azure-settings|azure-endpoint|azure-access-key|azure-connect|type="password"/);
+  assert.doesNotMatch(source, /speechSynthesis|SpeechSynthesisUtterance|x-functions-key|azureConfig|localStorage|keychain/i);
+  const app = setup();
+  assert.equal(app.get("play").disabled, true);
+  assert.equal(app.get("language").disabled, true);
+  assert.equal(app.get("voice").disabled, true);
+  assert.equal(app.get("speed").disabled, true);
+  assert.equal(app.get("status").textContent, "Loading Microsoft neural voices...");
+  app.paste("No setup needed.");
+  assert.equal(app.get("play").disabled, true);
+  await tick();
+  assert.equal(app.requests.length, 1);
+  assert.equal(app.requests[0].url, "https://read-aloud-0b33fdb4.azurewebsites.net/api/voices");
+  assert.equal(app.requests[0].options.headers, undefined);
+  assert.equal(app.requests[0].options.credentials, "omit");
+  assert.equal(app.requests[0].options.redirect, "error");
+  assert.equal(app.get("language").value, "en-US");
+  assert.equal(app.get("voice").value, azureVoice.voiceURI);
+  assert.equal(app.get("play").disabled, false);
+  assert.equal(app.get("status").textContent, "Azure is ready when you are.");
+  assert.deepEqual(Array.from(app.get("voice").children, (item) => item.value), [azureVoice.voiceURI]);
+});
+
+test("American English and Ava Multilingual are selected by default and used for playback", async () => {
+  assert.match(html, /<select id="language">\s*<option value="en-US">American English \(en-US\)<\/option>/);
+  const app = setup({ availableVoices: [
+    { voiceURI: "fr-FR-DeniseNeural", name: "Denise", lang: "fr-FR" },
+    { ...azureVoice, default: true },
+    avaVoice,
+  ] });
+  await tick();
+  assert.equal(app.get("language").value, "en-US");
+  assert.equal(app.get("voice").value, avaVoice.voiceURI);
+  assert.deepEqual(Array.from(app.get("voice").children, (item) => item.value),
+    [azureVoice.voiceURI, avaVoice.voiceURI]);
+  app.paste("Use the default voice.");
+  app.get("play").fire("click");
+  await tick();
+  assert.equal(JSON.parse(app.requests[1].options.body).voice, avaVoice.voiceURI);
+  app.get("stop").fire("click");
+  app.get("voice").value = azureVoice.voiceURI;
+  app.get("language").value = "";
+  app.get("language").fire("change");
+  assert.equal(app.get("voice").value, azureVoice.voiceURI);
+  assert.equal(app.get("voice").children.length, 3);
+});
+
+test("an unavailable default language falls back to all available languages", async () => {
+  const french = { voiceURI: "fr-FR-DeniseNeural", name: "Denise", lang: "fr-FR" };
+  const { get } = setup({ availableVoices: [french] });
+  await tick();
+  assert.equal(get("language").value, "");
+  assert.equal(get("voice").value, french.voiceURI);
+  assert.equal(get("voice").disabled, false);
+});
+
+test("empty input is disabled; whitespace cannot start playback", async () => {
+  const { get, paste, requests } = setup();
+  await tick();
   assert.equal(get("play").disabled, true);
   paste("   \n ");
   get("play").fire("click");
   assert.equal(get("play").disabled, true);
-  assert.equal(synth.utterances.length, 0);
+  assert.equal(requests.length, 1);
+  assert.equal(get("text").focused, true);
 });
 
-test("play, pause, resume, completion, and editing controls", () => {
-  const { get, paste, synth } = setup();
-  paste("Hello world.");
-  assert.equal(get("character-count").textContent, "12 characters");
-  get("play").fire("click");
-  assert.equal(synth.utterances[0].text, "Hello world.");
-  assert.equal(get("play-label").textContent, "Pause");
-  assert.equal(get("text").readOnly, true);
-  assert.equal(get("language").disabled, true);
-  assert.equal(get("voice").disabled, true);
-  assert.equal(get("speed").disabled, true);
-  get("play").fire("click");
-  assert.equal(synth.pauses, 1);
-  assert.equal(get("play-label").textContent, "Resume");
-  assert.equal(get("language").disabled, true);
-  get("play").fire("click");
-  assert.equal(synth.resumes, 2);
-  assert.equal(synth.utterances.length, 1);
-  synth.utterances[0].onend();
-  assert.equal(get("play-label").textContent, "Play");
-  assert.equal(get("text").readOnly, false);
-  assert.equal(get("language").disabled, false);
-  assert.equal(get("stop").disabled, true);
-  assert.equal(get("status").textContent, "Finished. Listen again anytime.");
+test("Azure playback preserves speed, pauses, resumes, and releases URLs", async () => {
+  const app = setup();
+  await tick();
+  app.get("speed").value = "2.5";
+  app.get("speed").fire("input");
+  assert.equal(app.get("speed-value").textContent, "2.5x");
+  assert.equal(app.get("speed").attributes["aria-valuetext"], "2.5 times normal speed");
+  app.paste("Hello & <world>.");
+  assert.equal(app.get("character-count").textContent, "16 characters");
+  app.get("play").fire("click");
+  await tick();
+  assert.deepEqual(JSON.parse(app.requests[1].options.body), {
+    text: "Hello & <world>.", voice: azureVoice.voiceURI,
+  });
+  assert.equal(app.audio.plays, 1);
+  assert.equal(app.audio.playbackRate, 2.5);
+  assert.equal(app.audio.preservesPitch, true);
+  assert.equal(app.get("text").readOnly, true);
+  assert.equal(app.get("language").disabled, true);
+  assert.equal(app.get("voice").disabled, true);
+  assert.equal(app.get("speed").disabled, true);
+  assert.equal(app.get("clear").disabled, true);
+  assert.equal(app.get("editing-hint").hidden, false);
+  const pauses = app.audio.pauses;
+  app.get("play").fire("click");
+  assert.equal(app.audio.pauses, pauses + 1);
+  assert.equal(app.get("play-label").textContent, "Resume");
+  assert.equal(app.get("language").disabled, true);
+  app.get("play").fire("click");
+  assert.equal(app.audio.plays, 2);
+  assert.equal(app.requests.length, 2);
+  app.audio.onended();
+  assert.equal(app.get("status").textContent, "Finished. Listen again anytime.");
+  assert.equal(app.get("play-label").textContent, "Play");
+  assert.equal(app.get("text").readOnly, false);
+  assert.equal(app.get("language").disabled, false);
+  assert.equal(app.get("voice").disabled, false);
+  assert.equal(app.get("speed").disabled, false);
+  assert.equal(app.get("stop").disabled, true);
+  assert.equal(app.get("editing-hint").hidden, true);
+  assert.equal(app.urls.revoked.length, 1);
+  assert.equal(app.audio.src, "");
 });
 
-test("selected voice, language, and fast playback rate reach the speech engine", () => {
-  const selected = { voiceURI: "test-voice", name: "Test", lang: "en-GB", default: true };
-  const { get, paste, synth } = setup({ availableVoices: [selected] });
-  get("voice").value = selected.voiceURI;
-  get("speed").value = "2.5";
-  get("speed").fire("input");
-  assert.equal(get("speed-value").textContent, "2.5x");
-  assert.equal(get("speed").attributes["aria-valuetext"], "2.5 times normal speed");
-  paste("Read this fast.");
-  get("play").fire("click");
-  assert.equal(synth.utterances[0].voice, selected);
-  assert.equal(synth.utterances[0].lang, "en-GB");
-  assert.equal(synth.utterances[0].rate, 2.5);
-});
-
-test("voices load asynchronously, preserve selection, and allow system default", () => {
-  const { get, synth, availableVoices, paste } = setup();
-  assert.equal(get("voice").children.length, 1);
-  availableVoices.push({ voiceURI: "new", name: "New voice", lang: "en-US" });
-  synth.events.voiceschanged();
-  assert.equal(get("voice").children.length, 2);
-  get("voice").value = "new";
-  synth.events.voiceschanged();
-  assert.equal(get("voice").value, "new");
-  availableVoices.length = 0;
-  synth.events.voiceschanged();
-  assert.equal(get("voice").value, "");
-  paste("System voice.");
-  get("play").fire("click");
-  assert.equal(synth.utterances[0].voice, null);
-});
-
-test("language options are unique, named, sorted, and keep regional variants separate", () => {
+test("language options are unique, named, sorted, and keep regional variants separate", async () => {
   const { get } = setup({ availableVoices: [
     { voiceURI: "french", name: "French", lang: "fr-FR" },
     { voiceURI: "british", name: "British", lang: "en-GB" },
-    { voiceURI: "american", name: "American", lang: "en-US" },
+    azureVoice,
     { voiceURI: "other-british", name: "Other British", lang: "en-GB" },
-    { voiceURI: "unknown", name: "Unknown", lang: "" },
   ] });
+  await tick();
   const options = get("language").children;
   assert.deepEqual(Array.from(options, (item) => item.value).sort(), ["", "en-GB", "en-US", "fr-FR"]);
-  assert.equal(get("language").children[0].textContent, "All languages");
+  assert.equal(options[0].textContent, "All languages");
   assert.match(options.find((item) => item.value === "en-GB").textContent, /English.*en-GB/);
   const labels = Array.from(options.slice(1), (item) => item.textContent);
   assert.deepEqual(labels, [...labels].sort((a, b) => a.localeCompare(b, "en")));
-  assert.equal(get("voice").children.length, 6);
+  assert.equal(get("language").value, "en-US");
+  assert.equal(get("voice").children.length, 1);
+  assert.equal(get("voice").value, azureVoice.voiceURI);
+  get("language").value = "";
+  get("language").fire("change");
+  assert.equal(get("voice").children.length, 4);
 });
 
-test("language filtering selects a matching voice and sends it to the speech engine", () => {
-  const french = { voiceURI: "french", name: "French", lang: "fr-FR" };
-  const { get, paste, synth } = setup({ availableVoices: [
-    { voiceURI: "english", name: "English", lang: "en-US", default: true },
-    french,
-  ] });
-  get("voice").value = "english";
+test("language filtering selects a matching voice and sends it to Azure", async () => {
+  const french = { voiceURI: "fr-FR-DeniseNeural", name: "Denise", lang: "fr-FR" };
+  const { get, paste, requests } = setup({ availableVoices: [azureVoice, french] });
+  await tick();
   get("language").value = "fr-FR";
   get("language").fire("change");
-  assert.deepEqual(Array.from(get("voice").children, (item) => item.value), ["french"]);
-  assert.equal(get("voice").value, "french");
+  assert.deepEqual(Array.from(get("voice").children, (item) => item.value), [french.voiceURI]);
+  assert.equal(get("voice").value, french.voiceURI);
   paste("Bonjour.");
   get("play").fire("click");
-  assert.equal(synth.utterances[0].voice, french);
-  assert.equal(synth.utterances[0].lang, "fr-FR");
+  await tick();
+  assert.equal(JSON.parse(requests[1].options.body).voice, french.voiceURI);
   get("stop").fire("click");
   assert.equal(get("language").disabled, false);
+  get("language").value = "";
+  get("language").fire("change");
+  assert.equal(get("voice").value, french.voiceURI);
+  assert.equal(get("voice").children.length, 2);
 });
 
-test("filtering prefers a matching default and preserves a matching user selection", () => {
+test("filtering prefers a matching default and preserves a matching user selection", async () => {
   const { get } = setup({ availableVoices: [
     { voiceURI: "first", name: "First", lang: "en-US" },
     { voiceURI: "default", name: "Default", lang: "en-US", default: true },
     { voiceURI: "british", name: "British", lang: "en-GB" },
   ] });
+  await tick();
+  assert.equal(get("voice").value, "default");
   get("language").value = "en-US";
   get("language").fire("change");
-  assert.equal(get("voice").value, "default");
   get("voice").value = "first";
   get("language").value = "";
   get("language").fire("change");
-  assert.equal(get("voice").children[0].textContent, "System default");
-  assert.equal(get("voice").children.length, 4);
   assert.equal(get("voice").value, "first");
-  get("language").value = "en-US";
+  get("language").value = "en-GB";
   get("language").fire("change");
-  assert.equal(get("voice").value, "first");
+  assert.equal(get("voice").value, "british");
 });
 
-test("voice refresh preserves language and voice, then recovers when either disappears", () => {
-  const { get, synth, availableVoices } = setup();
-  assert.equal(get("language").children.length, 1);
-  availableVoices.push(
-    { voiceURI: "english", name: "English", lang: "en-US" },
-    { voiceURI: "french", name: "French", lang: "fr-FR" },
-    { voiceURI: "other-french", name: "Other French", lang: "fr-FR" },
-  );
-  synth.events.voiceschanged();
-  get("language").value = "fr-FR";
-  get("language").fire("change");
-  get("voice").value = "other-french";
-  synth.events.voiceschanged();
-  assert.equal(get("language").value, "fr-FR");
-  assert.equal(get("voice").value, "other-french");
-  assert.equal(get("voice").children.length, 2);
-  availableVoices.pop();
-  synth.events.voiceschanged();
-  assert.equal(get("language").value, "fr-FR");
-  assert.equal(get("voice").value, "french");
-  availableVoices.pop();
-  synth.events.voiceschanged();
-  assert.equal(get("language").value, "");
-  assert.equal(get("voice").value, "");
-  assert.deepEqual(Array.from(get("voice").children, (item) => item.value), ["", "english"]);
-  availableVoices.length = 0;
-  synth.events.voiceschanged();
-  assert.equal(get("language").children.length, 1);
-  assert.equal(get("voice").children.length, 1);
-});
-
-test("long documents are fully spoken in bounded chunks", () => {
-  const { get, paste, synth } = setup();
-  const value = "This is a sentence to read aloud. ".repeat(100);
-  paste(value);
-  get("play").fire("click");
-  let index = 0;
-  while (index < synth.utterances.length) {
-    assert.ok(synth.utterances[index].text.length <= 200);
-    synth.utterances[index++].onend();
+test("long documents use bounded Azure chunks without losing text or emoji", async () => {
+  const app = setup();
+  await tick();
+  const value = `${"a".repeat(1499)}\u{1F600}${"b".repeat(2001)}`;
+  app.paste(value);
+  app.get("play").fire("click");
+  while (app.get("play-label").textContent !== "Play") {
+    await tick();
+    assert.ok(app.audio.onended);
+    app.audio.onended();
   }
-  assert.ok(index > 1);
-  assert.equal(synth.utterances.map((item) => item.text).join(" ").replace(/\s+/g, " ").trim(), value.trim());
-  assert.equal(get("play-label").textContent, "Play");
+  const spoken = app.requests.slice(1).map((request) => JSON.parse(request.options.body).text);
+  assert.ok(spoken.length > 1);
+  assert.ok(spoken.every((chunk) => chunk.length <= 1500));
+  assert.equal(spoken.join(""), value);
+  assert.ok(spoken.every((chunk) => !/[\uD800-\uDBFF]$/.test(chunk) && !/^[\uDC00-\uDFFF]/.test(chunk)));
 });
 
-test("unbroken text does not exceed the chunk limit or lose characters", () => {
+test("chunking keeps sentence boundaries, whitespace, and unbroken text", async () => {
   const { context } = setup();
-  const chunks = runInNewContext('splitText("a".repeat(601))', context);
-  assert.equal(chunks.length, 4);
-  assert.equal(chunks.join(""), "a".repeat(601));
-  assert.ok(chunks.every((chunk) => chunk.length <= 200));
+  await tick();
+  const value = "This is a sentence to read aloud. ".repeat(100);
+  context.input = value;
+  const chunks = runInNewContext("splitText(input)", context);
+  assert.ok(chunks.length > 1);
+  assert.ok(chunks.every((chunk) => chunk.length <= 1500));
+  assert.equal(chunks.join(" ").replace(/\s+/g, " ").trim(), value.trim());
+  const unbroken = runInNewContext('splitText("a".repeat(4501))', context);
+  assert.equal(unbroken.length, 4);
+  assert.equal(unbroken.join(""), "a".repeat(4501));
+  const invalidUnicode = runInNewContext('splitText("\\uD800 " + "a".repeat(1520))', context);
+  assert.equal(invalidUnicode[0], "\uD800");
+  assert.equal(invalidUnicode.slice(1).join(""), "a".repeat(1520));
 });
 
-test("a chunk ending during pause waits for resume", () => {
-  const { get, paste, synth } = setup();
-  paste("An ordinary sentence. ".repeat(30));
-  get("play").fire("click");
-  get("play").fire("click");
-  synth.utterances[0].onend();
-  assert.equal(synth.utterances.length, 1);
-  get("play").fire("click");
-  assert.equal(synth.utterances.length, 2);
+test("a chunk ending during pause waits for resume", async () => {
+  const app = setup();
+  await tick();
+  app.paste("An ordinary sentence. ".repeat(100));
+  app.get("play").fire("click");
+  await tick();
+  app.get("play").fire("click");
+  app.audio.onended();
+  assert.equal(app.requests.length, 2);
+  app.get("play").fire("click");
+  await tick();
+  assert.equal(app.requests.length, 3);
+  assert.equal(app.audio.plays, 2);
 });
 
-test("stop ignores late completion and errors from canceled playback", () => {
-  const { get, paste, synth } = setup();
-  paste("Some text. ".repeat(60));
-  get("play").fire("click");
-  const oldUtterance = synth.utterances[0];
-  get("stop").fire("click");
-  get("play").fire("click");
-  oldUtterance.onend();
-  oldUtterance.onerror({ error: "interrupted" });
-  assert.equal(synth.utterances.length, 2);
-  assert.equal(get("play-label").textContent, "Pause");
-  assert.equal(get("status").classes.has("error"), false);
+test("pausing while Azure is preparing audio waits for resume without re-synthesis", async () => {
+  let resolveSpeech;
+  const app = setup({ fetch: async (url) => {
+    if (url.endsWith("/voices")) return jsonResponse({ voices: [azureVoice] });
+    return new Promise((resolve) => { resolveSpeech = resolve; });
+  } });
+  await tick();
+  app.paste("Wait for this.");
+  app.get("play").fire("click");
+  app.get("play").fire("click");
+  resolveSpeech(audioResponse());
+  await tick();
+  assert.equal(app.audio.plays, 0);
+  app.get("play").fire("click");
+  assert.equal(app.audio.plays, 1);
+  assert.equal(app.requests.length, 2);
 });
 
-test("speech errors are visible and controls recover", () => {
-  const { get, paste, synth } = setup();
-  paste("Test error.");
-  get("play").fire("click");
-  synth.utterances[0].onerror({ error: "network" });
-  assert.match(get("status").textContent, /Speech failed \(network\)/);
-  assert.equal(get("status").classes.has("error"), true);
-  assert.equal(get("play-label").textContent, "Play");
-  assert.equal(get("text").readOnly, false);
+test("Stop aborts Azure synthesis and ignores stale responses after a new playback", async () => {
+  const pending = [];
+  const app = setup({ fetch: async (url, options) => {
+    if (url.endsWith("/voices")) return jsonResponse({ voices: [azureVoice] });
+    return new Promise((resolve) => pending.push({ resolve, signal: options.signal }));
+  } });
+  await tick();
+  app.paste("First.");
+  app.get("play").fire("click");
+  app.get("stop").fire("click");
+  assert.equal(pending[0].signal.aborted, true);
+  app.paste("Second.");
+  app.get("play").fire("click");
+  pending[0].resolve(audioResponse());
+  await tick();
+  assert.equal(app.audio.plays, 0);
+  pending[1].resolve(audioResponse());
+  await tick();
+  assert.equal(app.audio.plays, 1);
+  assert.equal(app.get("status").classes.has("error"), false);
 });
 
-test("clear resets text, count, focus, and play availability", () => {
+test("Stop releases audio and ignores late completion and errors", async () => {
+  const app = setup();
+  await tick();
+  app.paste("Some text. ".repeat(200));
+  app.get("play").fire("click");
+  await tick();
+  const onended = app.audio.onended;
+  const onerror = app.audio.onerror;
+  app.get("stop").fire("click");
+  assert.equal(app.audio.src, "");
+  assert.equal(app.urls.revoked.length, 1);
+  assert.equal(app.get("text").readOnly, false);
+  app.get("play").fire("click");
+  await tick();
+  onended();
+  onerror();
+  assert.equal(app.requests.length, 3);
+  assert.equal(app.get("play-label").textContent, "Pause");
+  assert.equal(app.get("status").classes.has("error"), false);
+});
+
+test("clear resets text, count, focus, and play availability", async () => {
   const { get, paste } = setup();
+  await tick();
   paste("a");
   assert.equal(get("character-count").textContent, "1 character");
   get("clear").fire("click");
@@ -296,26 +393,96 @@ test("clear resets text, count, focus, and play availability", () => {
   assert.equal(get("play").disabled, true);
 });
 
-test("unsupported browsers show an actionable message", () => {
-  const { get, paste } = setup({ supported: false });
-  assert.equal(get("play").disabled, true);
-  assert.equal(get("language").disabled, true);
-  assert.equal(get("voice").disabled, true);
-  assert.equal(get("speed").disabled, true);
-  assert.equal(get("status").classes.has("error"), true);
-  assert.match(get("status").textContent, /isn't available/);
-  paste("Text should not hide the browser compatibility message.");
-  assert.match(get("status").textContent, /isn't available/);
-  assert.equal(get("status").classes.has("error"), true);
-  get("clear").fire("click");
-  assert.match(get("status").textContent, /isn't available/);
+test("Azure request errors are visible and recover editing controls", async () => {
+  for (const response of [
+    () => jsonResponse({ error: "Monthly quota reached." }, 429),
+    () => new Response("", { status: 503 }),
+  ]) {
+    const app = setup({ fetch: async (url) => url.endsWith("/voices")
+      ? jsonResponse({ voices: [azureVoice] }) : response() });
+    await tick();
+    app.paste("Quota test.");
+    app.get("play").fire("click");
+    await tick();
+    assert.match(app.get("status").textContent, /Monthly quota reached|HTTP 503/);
+    assert.doesNotMatch(app.get("status").textContent, /Browser voices|switch/i);
+    assert.equal(app.get("status").classes.has("error"), true);
+    assert.equal(app.get("text").readOnly, false);
+    assert.equal(app.get("play-label").textContent, "Play");
+    assert.equal(app.get("language").disabled, false);
+  }
 });
 
-test("leaving the page cancels speech and resets controls", () => {
-  const { get, paste, synth, window } = setup();
-  paste("Goodbye.");
-  get("play").fire("click");
-  window.events.pagehide();
-  assert.equal(synth.cancels, 2);
-  assert.equal(get("play-label").textContent, "Play");
+test("connection failures and invalid catalogs show reload guidance and never enable playback", async () => {
+  for (const result of [
+    () => new Response("", { status: 401 }),
+    () => jsonResponse({ voices: [] }),
+    () => jsonResponse({ voices: [{ ...azureVoice, lang: "bad_locale" }] }),
+    () => jsonResponse({ voices: [{ ...azureVoice, voiceURI: 123 }] }),
+    () => { throw new TypeError("Failed to fetch"); },
+  ]) {
+    const app = setup({ fetch: async () => result() });
+    await tick();
+    app.paste("Hello.");
+    app.get("play").fire("click");
+    assert.equal(app.requests.length, 1);
+    assert.equal(app.get("play").disabled, true);
+    assert.equal(app.get("language").disabled, true);
+    assert.equal(app.get("voice").disabled, true);
+    assert.equal(app.get("speed").disabled, true);
+    assert.equal(app.get("status").classes.has("error"), true);
+    assert.match(app.get("status").textContent, /Could not load Azure voices:.*Reload the page to retry/);
+    assert.doesNotMatch(app.get("status").textContent, /Browser voices|switch/i);
+    app.get("clear").fire("click");
+    assert.equal(app.get("status").classes.has("error"), true);
+    assert.match(app.get("status").textContent, /Reload the page to retry/);
+  }
+});
+
+test("leaving the page aborts and ignores a late voice catalog", async () => {
+  let resolveVoices;
+  let signal;
+  const app = setup({ fetch: async (url, options) => {
+    signal = options.signal;
+    return new Promise((resolve) => { resolveVoices = resolve; });
+  } });
+  app.window.events.pagehide();
+  assert.equal(signal.aborted, true);
+  resolveVoices(jsonResponse({ voices: [azureVoice] }));
+  await tick();
+  app.paste("Not connected.");
+  assert.equal(app.get("play").disabled, true);
+  assert.equal(app.get("status").classes.has("error"), false);
+});
+
+test("Azure rejects invalid audio and handles autoplay failures and page exit", async () => {
+  for (const blob of [new Blob([], { type: "audio/mpeg" }), new Blob(["not audio"], { type: "text/html" })]) {
+    const invalid = setup({ fetch: async (url) => url.endsWith("/voices")
+      ? jsonResponse({ voices: [azureVoice] }) : { ok: true, blob: async () => blob } });
+    await tick();
+    invalid.paste("Bad audio.");
+    invalid.get("play").fire("click");
+    await tick();
+    assert.match(invalid.get("status").textContent, /did not return valid audio/);
+    assert.equal(invalid.get("text").readOnly, false);
+  }
+  const app = setup();
+  await tick();
+  app.paste("Audio test.");
+  app.audio.play = () => Promise.reject(new Error("NotAllowedError"));
+  app.get("play").fire("click");
+  await tick();
+  assert.match(app.get("status").textContent, /Audio playback failed/);
+  assert.equal(app.urls.revoked.length, 1);
+  assert.equal(app.get("text").readOnly, false);
+  app.audio.play = () => Promise.resolve();
+  app.get("play").fire("click");
+  await tick();
+  app.audio.onerror();
+  assert.match(app.get("status").textContent, /could not be decoded/);
+  app.get("play").fire("click");
+  await tick();
+  app.window.events.pagehide();
+  assert.equal(app.audio.src, "");
+  assert.equal(app.urls.revoked.length, 3);
 });

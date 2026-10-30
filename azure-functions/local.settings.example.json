@@ -1,0 +1,12 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "SPEECH_KEY": "",
+    "SPEECH_REGION": ""
+  },
+  "Host": {
+    "CORS": "http://127.0.0.1:8000",
+    "CORSCredentials": false
+  }
+}

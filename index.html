@@ -20,7 +20,7 @@
           </span>
           Read aloud
         </div>
-        <span class="browser-badge"><span aria-hidden="true"></span> Built into your browser</span>
+        <span class="voice-badge"><span aria-hidden="true"></span> Microsoft Azure voices</span>
       </header>
 
       <section class="intro" aria-labelledby="heading">
@@ -43,13 +43,13 @@
           <div class="language-setting">
             <label for="language">Language</label>
             <select id="language">
-              <option value="">All languages</option>
+              <option value="en-US">American English (en-US)</option>
             </select>
           </div>
           <div class="voice-setting">
             <label for="voice">Voice</label>
             <select id="voice">
-              <option value="">System default</option>
+              <option value="">Loading voices...</option>
             </select>
           </div>
           <div class="speed-setting">
@@ -74,12 +74,12 @@
               Stop
             </button>
           </div>
-          <p id="status" role="status">Ready when you are.</p>
+          <p id="status" role="status">Loading Microsoft neural voices...</p>
         </div>
         <p id="editing-hint" class="editing-hint" hidden>Stop playback to edit your text, language, voice, or speed.</p>
       </section>
 
-      <footer>No account. No API key. Just your browser's speech engine.<br><span>Available voices depend on your device. Some voices use online services.</span></footer>
+      <footer>Microsoft neural voices, ready to listen.<br><span>Azure sends text to Microsoft for speech processing and requires internet access.</span></footer>
       <noscript><p class="noscript">Please enable JavaScript to use text to speech.</p></noscript>
     </main>
   </body>

@@ -16,7 +16,7 @@ main {
   padding: 38px 0 28px;
 }
 
-header, .brand, .browser-badge, .text-heading, .text-footer,
+header, .brand, .voice-badge, .text-heading, .text-footer,
 .speed-heading, .range-labels, .playback, .playback-buttons {
   display: flex;
   align-items: center;
@@ -27,8 +27,8 @@ header, .brand, .browser-badge, .text-heading, .text-footer,
 .brand-icon { display: grid; place-items: center; width: 35px; height: 35px; background: #e5ece2; border-radius: 11px; }
 svg { width: 20px; height: 20px; flex-shrink: 0; }
 .brand-icon svg { width: 21px; height: 21px; }
-.browser-badge { gap: 7px; color: #69756b; font-size: 11px; }
-.browser-badge span { width: 6px; height: 6px; border-radius: 50%; background: #71936b; }
+.voice-badge { gap: 7px; color: #69756b; font-size: 11px; }
+.voice-badge span { width: 6px; height: 6px; border-radius: 50%; background: #71936b; }
 
 .intro { margin: 55px 0 28px; }
 h1 { margin: 0; font-size: clamp(36px, 6vw, 48px); line-height: 1.13; font-weight: 550; letter-spacing: -2px; }
@@ -96,7 +96,7 @@ footer span { color: #979f93; font-size: 10px; }
 
 @media (max-width: 540px) {
   main { width: calc(100% - 32px); padding-top: 24px; }
-  .browser-badge { font-size: 10px; }
+  .voice-badge { font-size: 10px; }
   .intro { margin-top: 38px; }
   .reader { padding: 18px; }
   textarea { min-height: 220px; }
@@ -106,5 +106,5 @@ footer span { color: #979f93; font-size: 10px; }
 }
 
 @media (max-width: 360px) {
-  .browser-badge { display: none; }
+  .voice-badge { display: none; }
 }
