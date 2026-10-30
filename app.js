@@ -8,6 +8,7 @@ const speedValue = document.getElementById("speed-value");
 const play = document.getElementById("play");
 const playLabel = document.getElementById("play-label");
 const stop = document.getElementById("stop");
+const download = document.getElementById("download");
 const clear = document.getElementById("clear");
 const status = document.getElementById("status");
 const characterCount = document.getElementById("character-count");
@@ -23,6 +24,7 @@ let generation = 0;
 let connectionRequest = null;
 let speechRequest = null;
 let audioUrl = null;
+let downloadUrl = null;
 
 function isReady() {
   return voices.length > 0;
@@ -39,7 +41,8 @@ function render(message, error = false) {
   language.disabled = !ready || active;
   voice.disabled = !ready || active;
   speed.disabled = !ready || active;
-  play.disabled = !ready || (!active && !text.value.trim());
+  play.disabled = !ready || state === "downloading" || (!active && !text.value.trim());
+  download.disabled = !ready || active || !text.value.trim();
   stop.disabled = !active;
   clear.disabled = active || !text.value;
   editingHint.hidden = !active;
@@ -125,7 +128,13 @@ function stopSpeech(message) {
   speechRequest?.abort();
   speechRequest = null;
   releaseAudio();
+  releaseDownload();
   render(message);
+}
+
+function releaseDownload() {
+  if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+  downloadUrl = null;
 }
 
 function releaseAudio() {
@@ -168,6 +177,63 @@ function playAzureAudio(token) {
   });
 }
 
+async function requestAzureAudio(value, signal) {
+  const response = await requestAzure("speech", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: value, voice: voice.value }),
+  }, signal);
+  const blob = await response.blob();
+  if (!blob.size || !blob.type.startsWith("audio/")) throw new Error("The Function did not return valid audio.");
+  return blob;
+}
+
+async function downloadAudio() {
+  if (!isReady() || state !== "idle") return;
+  if (!text.value.trim()) {
+    render("Paste some text to get started.");
+    text.focus();
+    return;
+  }
+  const token = ++generation;
+  const controller = new AbortController();
+  speechRequest = controller;
+  state = "downloading";
+  const sections = splitText(text.value);
+  const parts = [];
+  try {
+    for (let index = 0; index < sections.length; index += 1) {
+      render(`Preparing MP3 (${index + 1} of ${sections.length})...`);
+      const blob = await requestAzureAudio(sections[index], controller.signal);
+      if (token !== generation) return;
+      if (blob.type !== "audio/mpeg") throw new Error("The Function did not return MP3 audio.");
+      parts.push(blob);
+    }
+    releaseDownload();
+    downloadUrl = URL.createObjectURL(new Blob(parts, { type: "audio/mpeg" }));
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    const now = new Date();
+    const timestamp = [
+      now.getFullYear(), now.getMonth() + 1, now.getDate(),
+      now.getHours(), now.getMinutes(), now.getSeconds(),
+    ].map((part) => String(part).padStart(2, "0"));
+    link.download = `TTS_${timestamp.slice(0, 3).join("-")}_${timestamp.slice(3).join("-")}.mp3`;
+    document.body.append(link);
+    try {
+      link.click();
+    } finally {
+      link.remove();
+    }
+    state = "idle";
+    render("MP3 download started at original speed (1x).");
+  } catch (error) {
+    if (token === generation) playbackError(`Audio download failed: ${error.message}`);
+  } finally {
+    if (speechRequest === controller) speechRequest = null;
+  }
+}
+
 async function speakAzureNext(token) {
   if (speechRequest) return;
   releaseAudio();
@@ -175,14 +241,8 @@ async function speakAzureNext(token) {
   speechRequest = controller;
   render("Preparing Azure audio...");
   try {
-    const response = await requestAzure("speech", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: chunks[chunkIndex], voice: voice.value }),
-    }, controller.signal);
-    const blob = await response.blob();
+    const blob = await requestAzureAudio(chunks[chunkIndex], controller.signal);
     if (token !== generation) return;
-    if (!blob.size || !blob.type.startsWith("audio/")) throw new Error("The Function did not return valid audio.");
     audioUrl = URL.createObjectURL(blob);
     audio.onended = () => {
       if (token !== generation) return;
@@ -219,7 +279,7 @@ function speakNext(token) {
 }
 
 play.addEventListener("click", () => {
-  if (!isReady()) return;
+  if (!isReady() || state === "downloading") return;
   if (state === "playing") {
     state = "paused";
     audio.pause();
@@ -244,7 +304,9 @@ play.addEventListener("click", () => {
   }
 });
 
-stop.addEventListener("click", () => stopSpeech("Stopped. Press Play to start again."));
+download.addEventListener("click", downloadAudio);
+stop.addEventListener("click", () => stopSpeech(state === "downloading"
+  ? "Download canceled." : "Stopped. Press Play to start again."));
 clear.addEventListener("click", () => {
   text.value = "";
   render(isReady() ? readyMessage() : undefined);

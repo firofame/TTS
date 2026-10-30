@@ -38,10 +38,16 @@ function setup({ availableVoices = [azureVoice], url = "https://firofame.github.
       setAttribute(name, value) { this.attributes[name] = value; },
       replaceChildren(...children) { this.children = children; },
       focus() { this.focused = true; },
+      click() { this.clicked = true; },
+      remove() { this.removed = true; },
       fire(name) { return this.events[name]?.(); },
     };
   }
   const document = {
+    body: {
+      children: [],
+      append(child) { this.children.push(child); },
+    },
     getElementById(id) {
       assert.ok(elementIds.has(id), `Missing HTML element: ${id}`);
       if (!elements.has(id)) {
@@ -91,7 +97,7 @@ function setup({ availableVoices = [azureVoice], url = "https://firofame.github.
   }
   const requests = [];
   const context = {
-    window, document, URL: TestURL, AbortController, AbortSignal,
+    window, document, URL: TestURL, AbortController, AbortSignal, Blob,
     fetch(url, options) {
       requests.push({ url, options });
       return fetch(url, options);
@@ -103,8 +109,173 @@ function setup({ availableVoices = [azureVoice], url = "https://firofame.github.
     get("text").value = value;
     get("text").fire("input");
   };
-  return { get, paste, window, context, audio, urls, requests };
+  return { get, paste, window, context, audio, urls, requests, document };
 }
+
+test("download requires loaded voices and nonempty text", async () => {
+  const app = setup();
+  assert.equal(app.get("download").disabled, true);
+  await app.get("download").fire("click");
+  assert.equal(app.requests.length, 1);
+  await tick();
+  for (const value of ["", " \n "]) {
+    app.paste(value);
+    assert.equal(app.get("download").disabled, true);
+    await app.get("download").fire("click");
+    assert.equal(app.requests.length, 1);
+    assert.equal(app.get("text").focused, true);
+  }
+  app.paste("Ready to download.");
+  assert.equal(app.get("download").disabled, false);
+  app.get("clear").fire("click");
+  assert.equal(app.get("download").disabled, true);
+});
+
+test("download saves the complete text as one ordered MP3 at original speed without playback", async () => {
+  const app = setup({ availableVoices: [azureVoice, avaVoice],
+    fetch: async (url, options) => url.endsWith("/voices")
+      ? jsonResponse({ voices: [azureVoice, avaVoice] })
+      : { ok: true, blob: async () => new Blob(
+        [JSON.parse(options.body).text], { type: "audio/mpeg" }) } });
+  await tick();
+  app.get("voice").value = azureVoice.voiceURI;
+  app.get("voice").fire("change");
+  app.get("speed").value = "2.5";
+  app.get("speed").fire("input");
+  const value = `${"a".repeat(1499)}\u{1F600}${"b".repeat(2001)}`;
+  app.paste(value);
+  await app.get("download").fire("click");
+  const requests = app.requests.slice(1).map((request) => JSON.parse(request.options.body));
+  assert.ok(requests.length > 1);
+  assert.ok(requests.every((request) => request.text.length <= 1500 &&
+    request.voice === azureVoice.voiceURI && !("speed" in request)));
+  assert.equal(requests.map((request) => request.text).join(""), value);
+  assert.equal(app.audio.plays, 0);
+  assert.equal(app.urls.created.length, 1);
+  assert.equal(app.urls.created[0].blob.type, "audio/mpeg");
+  assert.equal(await app.urls.created[0].blob.text(), value);
+  const link = app.document.body.children[0];
+  assert.equal(link.href, app.urls.created[0].value);
+  assert.match(link.download, /^TTS_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.mp3$/);
+  assert.equal(link.clicked, true);
+  assert.equal(link.removed, true);
+  assert.match(app.get("status").textContent, /MP3 download started.*1x/);
+  assert.equal(app.get("status").classes.has("error"), false);
+  assert.equal(app.get("text").readOnly, false);
+  assert.equal(app.get("stop").disabled, true);
+  assert.equal(app.get("play").disabled, false);
+  assert.equal(app.get("download").disabled, false);
+  assert.equal(app.get("speed").value, "2.5");
+  await app.get("download").fire("click");
+  assert.deepEqual(app.urls.revoked, [app.urls.created[0].value]);
+  app.window.events.pagehide();
+  assert.deepEqual(app.urls.revoked, app.urls.created.map((item) => item.value));
+});
+
+test("download filenames use the current local date and time with zero-padded components", async () => {
+  const app = setup();
+  await tick();
+  app.paste("Timestamped download.");
+  let now;
+  app.context.Date = class extends Date {
+    constructor() { super(now.getTime()); }
+  };
+  for (const [date, expected] of [
+    [new Date(2026, 0, 2, 3, 4, 5), "TTS_2026-01-02_03-04-05.mp3"],
+    [new Date(2026, 11, 31, 23, 59, 59), "TTS_2026-12-31_23-59-59.mp3"],
+    [new Date(2027, 0, 1, 0, 0, 0), "TTS_2027-01-01_00-00-00.mp3"],
+  ]) {
+    now = date;
+    await app.get("download").fire("click");
+    assert.equal(app.document.body.children.at(-1).download, expected);
+    assert.equal(app.document.body.children.at(-1).clicked, true);
+  }
+});
+
+test("download preparation locks editing and playback, reports progress, and Stop cancels stale work", async () => {
+  const pending = [];
+  const app = setup({ fetch: async (url, options) => url.endsWith("/voices")
+    ? jsonResponse({ voices: [azureVoice] })
+    : new Promise((resolve) => pending.push({ resolve, signal: options.signal })) });
+  await tick();
+  app.paste("a".repeat(3001));
+  const canceled = app.get("download").fire("click");
+  assert.match(app.get("status").textContent, /Preparing MP3 \(1 of 3\)/);
+  assert.equal(app.get("text").readOnly, true);
+  for (const id of ["language", "voice", "speed", "play", "download", "clear"]) {
+    assert.equal(app.get(id).disabled, true, id);
+  }
+  assert.equal(app.get("stop").disabled, false);
+  app.get("play").fire("click");
+  await app.get("download").fire("click");
+  assert.equal(pending.length, 1);
+  pending[0].resolve(audioResponse());
+  await tick();
+  assert.match(app.get("status").textContent, /Preparing MP3 \(2 of 3\)/);
+  app.get("stop").fire("click");
+  assert.equal(pending[1].signal.aborted, true);
+  assert.equal(app.get("status").textContent, "Download canceled.");
+  assert.equal(app.get("text").readOnly, false);
+  app.paste("New playback.");
+  app.get("play").fire("click");
+  pending[1].resolve(audioResponse());
+  await canceled;
+  assert.equal(app.urls.created.length, 0);
+  assert.equal(app.document.body.children.length, 0);
+  pending[2].resolve(audioResponse());
+  await tick();
+  assert.equal(app.audio.plays, 1);
+  assert.equal(app.get("status").classes.has("error"), false);
+});
+
+test("download failures never save a partial file and restore controls", async () => {
+  for (const failure of [
+    () => jsonResponse({ error: "Monthly quota reached." }, 429),
+    () => new Response("", { status: 503 }),
+    () => { throw new TypeError("Failed to fetch"); },
+    () => ({ ok: true, blob: async () => new Blob([], { type: "audio/mpeg" }) }),
+    () => ({ ok: true, blob: async () => new Blob(["invalid"], { type: "text/html" }) }),
+    () => ({ ok: true, blob: async () => new Blob(["wrong format"], { type: "audio/wav" }) }),
+  ]) {
+    let speechCalls = 0;
+    const app = setup({ fetch: async (url) => {
+      if (url.endsWith("/voices")) return jsonResponse({ voices: [azureVoice] });
+      return ++speechCalls === 1 ? audioResponse() : failure();
+    } });
+    await tick();
+    app.paste("a".repeat(3001));
+    await app.get("download").fire("click");
+    assert.equal(speechCalls, 2);
+    assert.match(app.get("status").textContent, /Audio download failed:/);
+    assert.equal(app.get("status").classes.has("error"), true);
+    assert.equal(app.urls.created.length, 0);
+    assert.equal(app.document.body.children.length, 0);
+    assert.equal(app.get("text").readOnly, false);
+    for (const id of ["language", "voice", "speed", "play", "download", "clear"]) {
+      assert.equal(app.get(id).disabled, false, id);
+    }
+    assert.equal(app.get("stop").disabled, true);
+  }
+});
+
+test("leaving the page cancels pending downloads without saving a late response", async () => {
+  let resolveSpeech;
+  let signal;
+  const app = setup({ fetch: async (url, options) => {
+    if (url.endsWith("/voices")) return jsonResponse({ voices: [azureVoice] });
+    signal = options.signal;
+    return new Promise((resolve) => { resolveSpeech = resolve; });
+  } });
+  await tick();
+  app.paste("Download before leaving.");
+  const downloading = app.get("download").fire("click");
+  app.window.events.pagehide();
+  assert.equal(signal.aborted, true);
+  resolveSpeech(audioResponse());
+  await downloading;
+  assert.equal(app.urls.created.length, 0);
+  assert.equal(app.get("status").classes.has("error"), false);
+});
 
 test("Azure loads automatically without a source selector, browser speech, or client credentials", async () => {
   assert.doesNotMatch(html, /id="provider"|provider-setting|Voice source|Browser voices|System default/);
@@ -113,6 +284,7 @@ test("Azure loads automatically without a source selector, browser speech, or cl
   assert.doesNotMatch(source, /speechSynthesis|SpeechSynthesisUtterance|x-functions-key|azureConfig|localStorage|keychain/i);
   const app = setup();
   assert.equal(app.get("play").disabled, true);
+  assert.equal(app.get("download").disabled, true);
   assert.equal(app.get("language").disabled, true);
   assert.equal(app.get("voice").disabled, true);
   assert.equal(app.get("speed").disabled, true);
@@ -303,6 +475,7 @@ test("Azure playback preserves speed, pauses, resumes, and releases URLs", async
   assert.equal(app.get("voice").disabled, true);
   assert.equal(app.get("speed").disabled, true);
   assert.equal(app.get("clear").disabled, true);
+  assert.equal(app.get("download").disabled, true);
   assert.equal(app.get("editing-hint").hidden, false);
   const pauses = app.audio.pauses;
   app.get("play").fire("click");
@@ -543,6 +716,7 @@ test("connection failures and invalid catalogs show reload guidance and never en
     app.get("play").fire("click");
     assert.equal(app.requests.length, 1);
     assert.equal(app.get("play").disabled, true);
+    assert.equal(app.get("download").disabled, true);
     assert.equal(app.get("language").disabled, true);
     assert.equal(app.get("voice").disabled, true);
     assert.equal(app.get("speed").disabled, true);

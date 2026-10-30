@@ -10,6 +10,13 @@ Open the app in Chrome, Edge, Firefox, or Safari. Paste text, choose a language,
 voice, and speed (0.5x to 3x), then press **Play**. **Pause** and **Resume** keep
 your place. **Stop** returns to the beginning and unlocks editing.
 
+Choose **Download MP3** to save the full text in the selected voice without
+playing it first. Downloads use the original voice speed (1x); the speed slider
+affects playback only. **Stop** cancels download preparation and unlocks editing.
+Long text is combined into one MP3, and preparation progress is shown.
+Files are named `TTS_YYYY-MM-DD_HH-mm-ss.mp3` using your local date and time
+when the download is ready, for example `TTS_2026-10-30_08-21-02.mp3`.
+
 On mobile, the reader comes first: a single-row header, no visible marketing
 intro, and a full-width primary playback button directly below the text.
 Language, voice, and speed settings follow the playback controls.
@@ -61,6 +68,9 @@ pitch-preserving speed control. Pause/Resume does not synthesize the same audio
 again. Stop aborts pending requests and releases audio, but already submitted
 Azure work may still count toward quota. Starting over synthesizes text again.
 There are no automatic synthesis retries or background prefetch requests.
+Each download synthesizes the full text again and uses the same shared Azure
+quota as playback. Canceling a download aborts pending requests, but already
+submitted work may still count toward quota. No partial file is downloaded.
 
 If Azure is unavailable, the app shows an explicit error. Reload the page to
 retry loading its catalog, or try playback again later if synthesis fails.
@@ -158,5 +168,6 @@ Tests mock media playback and Azure responses. They cover
 system and saved themes, live appearance changes, storage failures,
 automatic voice loading, Azure-only UI, cancellation,
 pause/resume, chunking, filtering, voice URL selection and sharing, SSML escaping,
-input validation, public route registration, and explicit upstream errors without
+full-text MP3 downloads, download cancellation and cleanup, input validation,
+public route registration, and explicit upstream errors without
 consuming Azure quota.

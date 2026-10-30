@@ -66,10 +66,15 @@
               <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="10" height="10" rx="1.5"></rect></svg>
               Stop
             </button>
+            <button id="download" class="stop-button" type="button" aria-describedby="download-hint" disabled>
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3v9m-4-4 4 4 4-4M4 13v4h12v-4"></path></svg>
+              Download MP3
+            </button>
           </div>
           <p id="status" role="status">Loading Microsoft neural voices...</p>
         </div>
-        <p id="editing-hint" class="editing-hint" hidden>Stop playback to edit your text, language, voice, or speed.</p>
+        <p id="download-hint" class="download-hint">Download saves all text at original speed (1x). Speed affects playback only.</p>
+        <p id="editing-hint" class="editing-hint" hidden>Press Stop to edit your text, language, voice, or speed.</p>
 
         <div class="settings">
           <div class="language-setting">
