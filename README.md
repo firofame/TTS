@@ -30,6 +30,14 @@ changes to your device's appearance while the app is open. Your selection is
 saved locally for future visits. If browser storage is unavailable, a notice
 appears and theme changes still work for the current page.
 
+The footer's **Buy me a coffee** button opens Stripe-hosted Checkout in a new
+tab for an optional, one-time **INR 10** contribution. Payment details are
+handled by Stripe, not the app; no Stripe keys, scripts, or backend changes
+are required. The button also works without JavaScript. To change the amount,
+create a new Stripe Payment Link and update the button's URL, amount, and
+accessible label in [index.html](./index.html), along with its regression test
+in [app.test.cjs](./app.test.cjs).
+
 **Microsoft Azure** is the only voice source. **All languages** shows all Azure
 voices. Regional language variants are filtered separately. The default selection
 is **American English (en-US)** with **Ava Multilingual (en-US)** when available.
@@ -168,6 +176,7 @@ Tests mock media playback and Azure responses. They cover
 system and saved themes, live appearance changes, storage failures,
 automatic voice loading, Azure-only UI, cancellation,
 pause/resume, chunking, filtering, voice URL selection and sharing, SSML escaping,
-full-text MP3 downloads, download cancellation and cleanup, input validation,
+full-text MP3 downloads, download cancellation and cleanup, the footer's Stripe
+support link, input validation,
 public route registration, and explicit upstream errors without
 consuming Azure quota.

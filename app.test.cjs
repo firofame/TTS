@@ -304,6 +304,20 @@ test("Azure loads automatically without a source selector, browser speech, or cl
   assert.deepEqual(Array.from(app.get("voice").children, (item) => item.value), [azureVoice.voiceURI]);
 });
 
+test("footer offers a one-time INR 10 coffee through Stripe without client credentials or scripts", () => {
+  const footer = html.match(/<footer>([\s\S]*?)<\/footer>/)?.[1];
+  assert.ok(footer);
+  const link = footer.match(/<a\b([^>]*\bclass="coffee-button"[^>]*)>([\s\S]*?)<\/a>/);
+  assert.ok(link);
+  assert.match(link[1], /\bhref="https:\/\/buy\.stripe\.com\/8x23cwdfr2FCfhD3HFbZe00"/);
+  assert.match(link[1], /\btarget="_blank"/);
+  assert.match(link[1], /\brel="noopener noreferrer"/);
+  assert.match(link[1], /\baria-label="Buy me a coffee for INR 10 \(opens Stripe Checkout in a new tab\)"/);
+  assert.match(link[2], /Buy me a coffee &middot; &#8377;10/);
+  assert.match(link[2], /<svg\b[^>]*aria-hidden="true"/);
+  assert.doesNotMatch(html + source, /(?:sk|pk)_(?:live|test)_|js\.stripe\.com/);
+});
+
 test("playback precedes language, voice, and speed settings in document order", () => {
   for (const id of ["language", "voice", "speed"]) {
     assert.ok(html.indexOf('id="play"') < html.indexOf(`id="${id}"`));

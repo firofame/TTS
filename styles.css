@@ -28,8 +28,6 @@
   --stop-hover: light-dark(#e7ece2, #41533b);
   --status-text: light-dark(#7d8778, #acb9a5);
   --error: light-dark(#a63e30, #ffada0);
-  --footer-text: light-dark(#828c7e, #a1ae9b);
-  --footer-detail: light-dark(#979f93, #9ba994);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: var(--text);
   background: var(--page);
@@ -127,8 +125,9 @@ input[type="range"] { display: block; width: 100%; height: 17px; margin: 11px 0 
 #status { margin: 0; color: var(--status-text); text-align: right; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 #status.error { color: var(--error); }
 .editing-hint, .download-hint { margin: 14px 0 0; color: var(--status-text); font-size: 11px; line-height: 1.6; }
-footer { margin-top: 24px; color: var(--footer-text); text-align: center; font-size: 11px; line-height: 1.9; }
-footer span { color: var(--footer-detail); font-size: 10px; }
+footer { margin-top: 24px; text-align: center; }
+.coffee-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border: 1px solid var(--border); border-radius: 999px; background: var(--brand-background); color: var(--text); font-size: 13px; font-weight: 600; line-height: 1.5; text-decoration: none; }
+.coffee-button:hover { background: var(--stop-hover); }
 .noscript { color: var(--error); text-align: center; }
 
 @media (max-width: 640px) {
